@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.env.local
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+backend/mentorwow.db
+backend/*.db
+node_modules/
+frontend/dist/
+frontend/.vite/
+*.log
