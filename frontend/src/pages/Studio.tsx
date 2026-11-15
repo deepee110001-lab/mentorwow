@@ -1,133 +1,127 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Navigate } from 'react-router-dom'
-import { mentorApi, profileApi } from '../api'
+import { meApi } from '../api'
 import { useAuth } from '../auth'
-import type { Skill } from '../types'
+import type { Project } from '../types'
 
 export function Studio() {
-  const { user, ready, refresh } = useAuth()
-  const [catalog, setCatalog] = useState<Skill[]>([])
-  const [name, setName] = useState('')
-  const [headline, setHeadline] = useState('')
-  const [bio, setBio] = useState('')
-  const [location, setLocation] = useState('')
-  const [availability, setAvailability] = useState('')
-  const [years, setYears] = useState(0)
-  const [skills, setSkills] = useState<string[]>([])
-  const [customSkill, setCustomSkill] = useState('')
-  const [saved, setSaved] = useState(false)
+  const { user, ready, setUser } = useAuth()
+  const [handle, setHandle] = useState(user?.handle ?? '')
+  const [title, setTitle] = useState('')
+  const [summary, setSummary] = useState('')
+  const [url, setUrl] = useState('')
+  const [topics, setTopics] = useState('')
+  const [editing, setEditing] = useState<Project | null>(null)
   const [error, setError] = useState('')
+  const [saved, setSaved] = useState('')
 
   useEffect(() => {
-    mentorApi.skills().then(setCatalog)
-  }, [])
-
-  useEffect(() => {
-    if (!user) return
-    setName(user.name)
-    setHeadline(user.headline)
-    setBio(user.bio)
-    setLocation(user.location)
-    setAvailability(user.availability)
-    setYears(user.years_experience)
-    setSkills(user.skills)
+    if (user) setHandle(user.handle)
   }, [user])
 
   if (!ready) return <main className="page">Loading…</main>
   if (!user) return <Navigate to="/login" replace />
 
-  function toggleSkill(skill: string) {
-    setSkills((current) => (current.includes(skill) ? current.filter((item) => item !== skill) : [...current, skill]))
-  }
-
-  async function onSubmit(event: FormEvent) {
+  async function saveHandle(event: FormEvent) {
     event.preventDefault()
     setError('')
-    setSaved(false)
     try {
-      await profileApi.update({
-        name,
-        headline,
-        bio,
-        location,
-        availability,
-        years_experience: years,
-        skills,
-      })
-      await refresh()
-      setSaved(true)
+      setUser(await meApi.update({ handle }))
+      setSaved('Handle saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not save')
     }
   }
 
+  async function saveProject(event: FormEvent) {
+    event.preventDefault()
+    setError('')
+    const payload = {
+      title,
+      summary,
+      url,
+      topics: topics.split(',').map((part) => part.trim()).filter(Boolean),
+    }
+    try {
+      const next = editing ? await meApi.editProject(editing.id, payload) : await meApi.addProject(payload)
+      setUser(next)
+      setTitle('')
+      setSummary('')
+      setUrl('')
+      setTopics('')
+      setEditing(null)
+      setSaved('Project saved.')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save project')
+    }
+  }
+
+  function startEdit(project: Project) {
+    setEditing(project)
+    setTitle(project.title)
+    setSummary(project.summary)
+    setUrl(project.url)
+    setTopics(project.topics.join(', '))
+  }
+
   return (
     <main className="page">
-      <p className="eyebrow">{user.role === 'mentor' ? 'Mentor studio' : 'Mentee studio'}</p>
-      <h1 className="serif" style={{ fontSize: 52, marginTop: 6 }}>
-        How you show up
-      </h1>
-      <form className="form" onSubmit={onSubmit} style={{ maxWidth: 720, marginTop: 24 }}>
-        {error && <div className="error">{error}</div>}
-        {saved && <div className="success">Saved. {user.role === 'mentor' ? 'You are visible in the atelier.' : 'Mentors will see this with your ask.'}</div>}
+      <p className="eyebrow">Portfolio, not a résumé</p>
+      <h1 className="serif" style={{ fontSize: 52, marginTop: 6 }}>How the network sees you</h1>
+      <p className="lede">Projects only. No education. No jobs. Email stays off the profile.</p>
+      {error && <div className="error">{error}</div>}
+      {saved && <div className="success">{saved}</div>}
+      <form className="form" onSubmit={saveHandle} style={{ maxWidth: 720, marginTop: 24 }}>
         <label className="field">
-          <span>Name</span>
-          <input value={name} onChange={(event) => setName(event.target.value)} required />
+          <span>Handle</span>
+          <input value={handle} onChange={(event) => setHandle(event.target.value)} required />
         </label>
-        <label className="field">
-          <span>Headline</span>
-          <input value={headline} onChange={(event) => setHeadline(event.target.value)} placeholder="One line of the work you do" />
-        </label>
-        <label className="field">
-          <span>Bio</span>
-          <textarea rows={5} value={bio} onChange={(event) => setBio(event.target.value)} />
-        </label>
-        <div className="grid">
-          <label className="field">
-            <span>Location</span>
-            <input value={location} onChange={(event) => setLocation(event.target.value)} />
-          </label>
-          <label className="field">
-            <span>Availability</span>
-            <input value={availability} onChange={(event) => setAvailability(event.target.value)} />
-          </label>
-        </div>
-        <label className="field">
-          <span>Years in the work</span>
-          <input type="number" min={0} value={years} onChange={(event) => setYears(Number(event.target.value))} />
-        </label>
-        <div>
-          <p className="field">
-            <span>{user.role === 'mentor' ? 'Crafts you teach' : 'Crafts you want'}</span>
-          </p>
-          <div className="filters">
-            {catalog.map((item) => (
-              <button type="button" key={item.name} className={`pill ${skills.includes(item.name) ? 'on' : ''}`} onClick={() => toggleSkill(item.name)}>
-                {item.name}
-              </button>
-            ))}
-          </div>
-          <div className="filters">
-            <input value={customSkill} onChange={(event) => setCustomSkill(event.target.value)} placeholder="Add a craft" />
-            <button
-              type="button"
-              className="btn ghost"
-              onClick={() => {
-                const value = customSkill.trim()
-                if (value) {
-                  toggleSkill(value)
-                  setCustomSkill('')
-                }
-              }}
-            >
-              Add
-            </button>
-          </div>
-        </div>
-        <button className="btn primary" type="submit">
-          Save studio
-        </button>
+        <button className="btn ghost" type="submit">Save handle</button>
       </form>
+      <div className="split" style={{ marginTop: 32 }}>
+        <form className="card form" onSubmit={saveProject}>
+          <h3 className="serif" style={{ margin: 0, fontSize: 28 }}>
+            {editing ? 'Edit project' : 'Add a project'}
+          </h3>
+          <label className="field">
+            <span>Title</span>
+            <input value={title} onChange={(event) => setTitle(event.target.value)} required />
+          </label>
+          <label className="field">
+            <span>What the work did</span>
+            <textarea rows={4} value={summary} onChange={(event) => setSummary(event.target.value)} />
+          </label>
+          <label className="field">
+            <span>Link</span>
+            <input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://" />
+          </label>
+          <label className="field">
+            <span>Topics, comma separated</span>
+            <input value={topics} onChange={(event) => setTopics(event.target.value)} placeholder="system design, privacy" />
+          </label>
+          <div className="row-actions">
+            <button className="btn primary" type="submit">{editing ? 'Update' : 'Add to portfolio'}</button>
+            {editing && (
+              <button className="btn ghost" type="button" onClick={() => { setEditing(null); setTitle(''); setSummary(''); setUrl(''); setTopics('') }}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </form>
+        <div className="list">
+          {user.projects.map((project) => (
+            <article className="card" key={project.id}>
+              <h3 className="serif" style={{ margin: '0 0 6px', fontSize: 24 }}>{project.title}</h3>
+              <p>{project.summary}</p>
+              <div className="chips">{project.topics.map((topic) => <span className="chip" key={topic}>{topic}</span>)}</div>
+              <div className="row-actions">
+                <button className="btn ghost" onClick={() => startEdit(project)}>Edit</button>
+                <button className="btn ghost" onClick={() => meApi.deleteProject(project.id).then(setUser)}>Remove</button>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
     </main>
   )
 }

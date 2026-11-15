@@ -6,9 +6,10 @@ type AuthState = {
   user: User | null
   ready: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (payload: { email: string; password: string; name: string; role: 'mentee' | 'mentor' }) => Promise<void>
+  register: (payload: { email: string; password: string; name?: string; handle?: string }) => Promise<void>
   logout: () => void
   refresh: () => Promise<void>
+  setUser: (user: User) => void
 }
 
 const AuthContext = createContext<AuthState | null>(null)
@@ -18,6 +19,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false)
 
   async function refresh() {
+    const params = new URLSearchParams(window.location.search)
+    const linkedin = params.get('linkedin_token')
+    if (linkedin) {
+      setToken(linkedin)
+      params.delete('linkedin_token')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
     if (!getToken()) {
       setUser(null)
       setReady(true)
@@ -41,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       user,
       ready,
+      setUser,
       async login(email, password) {
         const result = await authApi.login(email, password)
         setToken(result.access_token)
