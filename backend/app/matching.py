@@ -66,7 +66,7 @@ def create_matches(db: Session, query: Query, event: Event) -> list[QueryMatch]:
         notify(
             db,
             match.matched_user_id,
-            f"{author.name or author.handle} asked for 5 min",
+            f"{author.handle} asked for 5 min",
             f"{query.type}: {query.body}",
             f"/e/{event.slug}/feed",
         )

@@ -3,12 +3,12 @@ import time
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
-from ..config import CALL_SECONDS, GURU_SEEK_COST
+from ..config import CALL_SECONDS, GURU_SEEK_COST, TURN_CREDENTIAL, TURN_URLS, TURN_USERNAME
 from ..database import SessionLocal, get_db
 from ..deps import get_current_user
 from ..guru import close_call, credit
 from ..hub import hub
-from ..models import Call, User
+from ..models import Call, EventCall, User
 from ..schemas import QueueIn
 from ..security import decode_access_token
 
@@ -41,6 +41,20 @@ async def enter_queue(payload: QueueIn, db: Session = Depends(get_db), current: 
     return result
 
 
+@router.get("/ice")
+def ice_servers(current: User = Depends(get_current_user)):
+    servers: list[dict] = [{"urls": "stun:stun.l.google.com:19302"}]
+    if TURN_URLS and TURN_USERNAME and TURN_CREDENTIAL:
+        servers.append(
+            {
+                "urls": TURN_URLS,
+                "username": TURN_USERNAME,
+                "credential": TURN_CREDENTIAL,
+            }
+        )
+    return {"iceServers": servers, "turn": bool(TURN_URLS)}
+
+
 @router.get("/status")
 async def queue_status(current: User = Depends(get_current_user)):
     return hub.snapshot(current.id)
@@ -60,6 +74,24 @@ async def call_socket(websocket: WebSocket, room_id: str):
         await websocket.close(code=4401)
         return
     await websocket.accept()
+    if room_id.startswith("ec-"):
+        try:
+            call_id = int(room_id[3:])
+        except ValueError:
+            await websocket.close(code=4404)
+            return
+        db = SessionLocal()
+        try:
+            call = db.query(EventCall).filter(EventCall.id == call_id).first()
+            if call is None or user_id not in {call.requester_id, call.responder_id}:
+                await websocket.close(code=4403)
+                return
+            if call.status not in {"scheduled", "completed"}:
+                await websocket.close(code=4409)
+                return
+            await hub.ensure_event_room(room_id, call.requester_id, call.responder_id)
+        finally:
+            db.close()
     room = await hub.connect(room_id, user_id, websocket)
     if room is None:
         await websocket.close(code=4404)

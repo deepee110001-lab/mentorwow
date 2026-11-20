@@ -1,30 +1,26 @@
-import { Link } from 'react-router-dom'
+import { Button, Page, Text } from '../ui'
 
 export function Home() {
   return (
-    <main className="page">
+    <Page>
       <section className="hero">
         <div>
-          <p className="eyebrow">Event-anchored networking</p>
-          <h1>Meet the room. Then keep the useful threads.</h1>
-          <p className="lede">
+          <Text variant="eyebrow">Event-anchored networking</Text>
+          <Text variant="display">Meet the room. Then keep the useful threads.</Text>
+          <Text variant="lede">
             Organizers share a join link. Attendees bring a portable profile — LinkedIn subset or a resume they
             opted into. Chat lives 24 hours. The query feed lives 7 days. Calls are five minutes, never recorded.
-          </p>
+          </Text>
           <div className="hero-actions">
-            <Link className="btn primary" to="/join/cedat-join-demo">
-              Join the CEDAT pilot
-            </Link>
-            <Link className="btn ghost" to="/organizer">
+            <Button to="/join/mentorwow-join">Join the MentorWow pilot</Button>
+            <Button variant="ghost" to="/organizer">
               Create an event
-            </Link>
+            </Button>
           </div>
         </div>
         <aside className="hero-panel">
-          <p className="eyebrow" style={{ color: '#e8b39f' }}>
-            What closes
-          </p>
-          <p className="quote">Chat after a day. The feed after a week. Your profile walks with you.</p>
+          <Text variant="eyebrow">What closes</Text>
+          <Text variant="quote">Chat after a day. The feed after a week. Your profile walks with you.</Text>
           <p className="quiet">AI routes queries. AI does not listen to calls.</p>
         </aside>
       </section>
@@ -42,6 +38,6 @@ export function Home() {
           <span>request-based calls, rate-limited</span>
         </div>
       </section>
-    </main>
+    </Page>
   )
 }

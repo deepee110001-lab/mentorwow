@@ -15,6 +15,7 @@ export type User = {
   photo_url: string
   accent: string
   guru_balance: number
+  is_admin: boolean
   projects: Project[]
 }
 
@@ -70,6 +71,19 @@ export type EventInfo = {
   metrics?: Metrics
 }
 
+export type FunnelStep = {
+  id: string
+  label: string
+  count: number
+  conversion_from_prev_pct: number
+  conversion_from_join_pct: number
+}
+
+export type Insight = {
+  severity: 'ok' | 'warn' | 'info'
+  text: string
+}
+
 export type Metrics = {
   profiles_completed: number
   profiles_completed_pct: number
@@ -79,8 +93,21 @@ export type Metrics = {
   queries_matched: number
   calls_accepted: number
   calls_completed: number
+  calls_no_show?: number
   repeat_attendees: number
   member_count?: number
+  match_rate_pct?: number
+  accept_rate_pct?: number
+  complete_rate_pct?: number
+  funnel?: FunnelStep[]
+  drop_off?: { from: string; to: string; from_label: string; to_label: string; conversion_pct: number } | null
+  insights?: Insight[]
+  activity?: {
+    days: number
+    totals: Record<string, number>
+    by_day: { day: string; events: Record<string, number>; total: number }[]
+    top_pages: [string, number][]
+  }
   group_strengths?: {
     skill_tags: [string, number][]
     can_advise_on: [string, number][]
@@ -88,8 +115,30 @@ export type Metrics = {
   }
 }
 
+export type ConnectionState = 'none' | 'pending_out' | 'pending_in' | 'connected'
+
+export type ConnectionRef = {
+  id: number | null
+  state: ConnectionState
+}
+
+export type ConnectionPerson = {
+  id: number
+  user_id: number
+  handle: string
+  headline: string
+  status: string
+  state: ConnectionState
+  source: string
+  created_at: string
+  accepted_at: string | null
+  event_name: string | null
+  event_slug: string | null
+}
+
 export type VisiblePerson = {
   user_id: number
+  handle: string
   name: string
   headline: string
   photo_url: string
@@ -101,6 +150,7 @@ export type VisiblePerson = {
   email: string | null
   attendance_visibility: string
   is_self: boolean
+  connection?: ConnectionRef
 }
 
 export type QueryItem = {
@@ -110,7 +160,7 @@ export type QueryItem = {
   available_slots: { start: string; end?: string }[]
   status: string
   created_at: string
-  author: { user_id: number; name: string; headline: string }
+  author: { user_id: number; handle: string; name: string; headline: string }
   matched: boolean
   my_response: string | null
   match_reason: string | null
@@ -120,12 +170,15 @@ export type QueryItem = {
 export type ChatMsg = {
   id: number
   body: string
+  kind?: 'message' | 'poll'
   is_pinned: boolean
   is_system: boolean
-  flagged: boolean
   parent_id: number | null
   created_at: string
-  author: { name: string; user_id: number | null }
+  deleted?: boolean
+  author: { handle?: string; name: string; user_id: number | null }
+  poll?: { yay: number; nay: number; total: number; my_vote: 'yay' | 'nay' | null } | null
+  event?: { id: number; slug: string; name: string } | null
 }
 
 export type EventCallRow = {
@@ -135,5 +188,5 @@ export type EventCallRow = {
   duration_minutes: number
   meeting_url: string | null
   role: string
-  other: { user_id: number; name: string; headline: string; email: string | null }
+  other: { user_id: number; handle?: string; name: string; headline: string; email: string | null }
 }

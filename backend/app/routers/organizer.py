@@ -3,19 +3,20 @@ import io
 import re
 import secrets
 from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
-from ..config import APP_URL, PILOT_GATE
+from ..config import APP_URL, ORGANIZER_EMAIL, PILOT_GATE
 from ..database import get_db
 from ..deps import get_current_user, get_optional_user
 from ..jsonutil import loads
-from ..models import ChatMessage, Event, EventCall, EventMember, Profile, Query, QueryMatch, User, utcnow
+from ..metrics import activity, funnel_for
+from ..models import Event, EventMember, Profile, User, utcnow
 from ..notify import send_email_stub
-from ..privacy import audit, is_organizer, refresh_status
+from ..privacy import audit, refresh_status
 from .events import event_out
 
 router = APIRouter(prefix="/api", tags=["organizer"])
@@ -37,43 +38,8 @@ def require_org_event(db: Session, event_id: int, user: User) -> Event:
 
 
 def metrics_for(db: Session, event: Event) -> dict:
+    data = funnel_for(db, event)
     members = db.query(EventMember).filter(EventMember.event_id == event.id, EventMember.accepted_join.is_(True)).all()
-    profiles_completed = 0
-    for member in members:
-        profile = db.query(Profile).filter(Profile.user_id == member.user_id).first()
-        user = db.query(User).filter(User.id == member.user_id).one()
-        if user.headline and profile and loads(profile.skill_tags):
-            profiles_completed += 1
-    queries = db.query(Query).filter(Query.event_id == event.id).all()
-    qids = [q.id for q in queries]
-    matched = (
-        db.query(QueryMatch.query_id).filter(QueryMatch.query_id.in_(qids)).distinct().count() if qids else 0
-    )
-    calls = db.query(EventCall).filter(EventCall.query_id.in_(qids)).all() if qids else []
-    accepted = [c for c in calls if c.status in {"scheduled", "completed"}]
-    completed = [c for c in calls if c.status == "completed"]
-    chat_n = db.query(ChatMessage).filter(ChatMessage.event_id == event.id).count()
-    posters = (
-        db.query(ChatMessage.author_id)
-        .filter(ChatMessage.event_id == event.id, ChatMessage.author_id.isnot(None))
-        .distinct()
-        .count()
-    )
-    member_ids = [m.user_id for m in members]
-    prior = (
-        db.query(EventMember.user_id)
-        .join(Event, Event.id == EventMember.event_id)
-        .filter(
-            Event.organizer_id == event.organizer_id,
-            Event.id != event.id,
-            EventMember.user_id.in_(member_ids),
-            EventMember.accepted_join.is_(True),
-        )
-        .distinct()
-        .count()
-        if member_ids
-        else 0
-    )
     visible = [m for m in members if m.attendance_visibility == "visible"]
     skills: Counter = Counter()
     advise: Counter = Counter()
@@ -85,23 +51,13 @@ def metrics_for(db: Session, event: Event) -> dict:
         skills.update(loads(profile.skill_tags))
         advise.update(loads(profile.can_advise_on))
         collab.update(loads(profile.open_to_collaborate_on))
-    return {
-        "profiles_completed": profiles_completed,
-        "profiles_completed_pct": round(100 * profiles_completed / max(len(members), 1)),
-        "chat_messages": chat_n,
-        "unique_posters": posters,
-        "queries_posted": len(queries),
-        "queries_matched": matched,
-        "calls_accepted": len(accepted),
-        "calls_completed": len(completed),
-        "repeat_attendees": prior,
-        "member_count": len(members),
-        "group_strengths": {
-            "skill_tags": skills.most_common(8),
-            "can_advise_on": advise.most_common(8),
-            "open_to_collaborate_on": collab.most_common(8),
-        },
+    data["group_strengths"] = {
+        "skill_tags": skills.most_common(8),
+        "can_advise_on": advise.most_common(8),
+        "open_to_collaborate_on": collab.most_common(8),
     }
+    data["activity"] = activity(db, days=14, event_id=event.id)
+    return data
 
 
 @router.get("/organizer/events")
@@ -181,11 +137,11 @@ def attendees_csv(event_id: int, db: Session = Depends(get_db), current: User = 
     members = db.query(EventMember).filter(EventMember.event_id == event.id).all()
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow(["name", "email", "headline", "attendance_visibility", "resume_visible"])
+    writer.writerow(["handle", "email", "headline", "attendance_visibility", "resume_visible"])
     for member in members:
         user = db.query(User).filter(User.id == member.user_id).one()
         writer.writerow(
-            [user.name or user.handle, user.email, user.headline, member.attendance_visibility, member.resume_visible_this_event]
+            [user.handle, user.email, user.headline, member.attendance_visibility, member.resume_visible_this_event]
         )
     buf.seek(0)
     return StreamingResponse(
@@ -206,7 +162,8 @@ def ask_event_2(event_id: int, db: Session = Depends(get_db), current: User = De
 
 @router.get("/pilot/metrics")
 def pilot_metrics(gate: str | None = None, db: Session = Depends(get_db), current: User | None = Depends(get_optional_user)):
-    if gate != PILOT_GATE and not (current and db.query(Event).filter(Event.organizer_id == current.id).first()):
+    admin = bool(current and current.email.lower() == ORGANIZER_EMAIL)
+    if not admin and gate != PILOT_GATE:
         raise HTTPException(status_code=403, detail="Pilot metrics are gated")
     events = db.query(Event).all()
     funnel = {
@@ -217,8 +174,11 @@ def pilot_metrics(gate: str | None = None, db: Session = Depends(get_db), curren
         "calls_accepted": 0,
         "calls_completed": 0,
         "repeat_attendees": 0,
+        "member_count": 0,
+        "calls_no_show": 0,
         "events": [],
     }
+    insights: list[dict] = []
     for event in events:
         m = metrics_for(db, event)
         for key in (
@@ -229,7 +189,29 @@ def pilot_metrics(gate: str | None = None, db: Session = Depends(get_db), curren
             "calls_accepted",
             "calls_completed",
             "repeat_attendees",
+            "member_count",
+            "calls_no_show",
         ):
-            funnel[key] += m[key]
+            funnel[key] += m.get(key, 0)
+        insights.extend(m.get("insights") or [])
         funnel["events"].append({"name": event.name, "slug": event.slug, **m})
+    posted = funnel["queries_posted"]
+    matched = funnel["queries_matched"]
+    accepted = funnel["calls_accepted"]
+    completed = funnel["calls_completed"]
+    members = funnel["member_count"]
+    funnel["profiles_completed_pct"] = round(100 * funnel["profiles_completed"] / max(members, 1))
+    funnel["match_rate_pct"] = round(100.0 * matched / posted, 1) if posted else 0.0
+    funnel["accept_rate_pct"] = round(100.0 * accepted / matched, 1) if matched else 0.0
+    funnel["complete_rate_pct"] = round(100.0 * completed / accepted, 1) if accepted else 0.0
+    funnel["insights"] = insights[:8]
+    funnel["activity"] = activity(db, days=14)
+    funnel["funnel"] = [
+        {"id": "joined", "label": "Joined event", "count": members, "conversion_from_prev_pct": 100.0, "conversion_from_join_pct": 100.0},
+        {"id": "profile", "label": "Profile completed", "count": funnel["profiles_completed"], "conversion_from_prev_pct": funnel["profiles_completed_pct"], "conversion_from_join_pct": funnel["profiles_completed_pct"]},
+        {"id": "query", "label": "Queries posted", "count": posted, "conversion_from_prev_pct": round(100.0 * posted / max(members, 1), 1), "conversion_from_join_pct": round(100.0 * posted / max(members, 1), 1)},
+        {"id": "matched", "label": "Queries matched", "count": matched, "conversion_from_prev_pct": funnel["match_rate_pct"], "conversion_from_join_pct": round(100.0 * matched / max(members, 1), 1)},
+        {"id": "accepted", "label": "Calls accepted", "count": accepted, "conversion_from_prev_pct": funnel["accept_rate_pct"], "conversion_from_join_pct": round(100.0 * accepted / max(members, 1), 1)},
+        {"id": "completed", "label": "Calls completed", "count": completed, "conversion_from_prev_pct": funnel["complete_rate_pct"], "conversion_from_join_pct": round(100.0 * completed / max(members, 1), 1)},
+    ]
     return funnel

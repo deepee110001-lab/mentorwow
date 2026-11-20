@@ -1,16 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { graphApi } from '../api'
 import { useAuth } from '../auth'
+import { SocialAuth } from '../SocialAuth'
+import { track } from '../metrics'
 import type { EventInfo } from '../types'
+import { Banner, Button, Card, Field, Page, Text } from '../ui'
 
 export function Join() {
   const { token } = useParams()
-  const { user, ready } = useAuth()
+  const { user, ready, loginGoogle } = useAuth()
   const navigate = useNavigate()
   const [event, setEvent] = useState<EventInfo | null>(null)
+  const [loadError, setLoadError] = useState('')
   const [error, setError] = useState('')
-  const [name, setName] = useState(user?.name || '')
   const [headline, setHeadline] = useState(user?.headline || '')
   const [skills, setSkills] = useState('')
   const [advise, setAdvise] = useState('')
@@ -26,21 +29,19 @@ export function Join() {
       .resolveJoin(token)
       .then((data) => {
         setEvent(data.event)
+        track('join_link_opened', { slug: data.event.slug }, data.event.id)
         if (data.joined) navigate(`/e/${data.event.slug}/feed`)
       })
-      .catch((err) => setError(err.message))
+      .catch((err) => setLoadError(err.message))
   }, [token, user])
 
   useEffect(() => {
-    if (user) {
-      setName(user.name)
-      setHeadline(user.headline)
-    }
+    if (user) setHeadline(user.headline)
   }, [user])
 
-  if (!ready) return <main className="page">Loading…</main>
-  if (error) return <main className="page"><div className="error">{error}</div></main>
-  if (!event) return <main className="page">Loading join link…</main>
+  if (!ready) return <Page>Loading…</Page>
+  if (loadError) return <Page><Banner>{loadError}</Banner></Page>
+  if (!event) return <Page>Loading join link…</Page>
 
   const next = `/join/${token}`
 
@@ -53,12 +54,12 @@ export function Join() {
         show_attendance: showAttendance,
         resume_visible_this_event: resumeVisible,
         show_contact_after_call: showContact,
-        name,
         headline,
         skill_tags: skills.split(',').map((s) => s.trim()).filter(Boolean),
         can_advise_on: advise.split(',').map((s) => s.trim()).filter(Boolean),
         open_to_collaborate_on: collab.split(',').map((s) => s.trim()).filter(Boolean),
       })
+      track('join_event', { slug: result.slug }, result.event.id)
       navigate(`/e/${result.slug}/feed`)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not join')
@@ -73,36 +74,54 @@ export function Join() {
   }
 
   return (
-    <main className="page">
-      <p className="eyebrow">Join event</p>
-      <h1 className="serif" style={{ fontSize: 44 }}>{event.name}</h1>
+    <Page>
+      <Text variant="eyebrow">Join event</Text>
+      <Text variant="title">{event.name}</Text>
       {!user ? (
-        <div className="card">
-          <p>Sign in with email or LinkedIn to join. We only store name, headline, photo, and email from LinkedIn.</p>
-          <div className="row-actions">
-            <Link className="btn primary" to={`/login?next=${encodeURIComponent(next)}`}>Sign in</Link>
-            <Link className="btn ghost" to={`/register?next=${encodeURIComponent(next)}`}>Create account</Link>
-          </div>
-        </div>
+        <Card as="div">
+          <Text variant="lede">Continue with Google. You get a handle automatically. Email is the fallback.</Text>
+          {error && <Banner>{error}</Banner>}
+          <SocialAuth
+            onGoogle={async (credential) => {
+              setError('')
+              try {
+                const isNew = await loginGoogle(credential)
+                track(isNew ? 'register_google' : 'login_google', { method: 'google', source: 'join', is_new: String(isNew) })
+              } catch (err) {
+                setError(err instanceof Error ? err.message : 'Google sign-in failed')
+              }
+            }}
+          />
+          <Button variant="ghost" to={`/login?next=${encodeURIComponent(next)}`}>
+            Email instead
+          </Button>
+        </Card>
       ) : (
         <form className="form" onSubmit={onJoin} style={{ maxWidth: 640 }}>
-          <p className="lede">Your profile is portable. Chat and feed for this event are not.</p>
-          <label className="field"><span>Name</span><input value={name} onChange={(e) => setName(e.target.value)} required /></label>
-          <label className="field"><span>Headline</span><input value={headline} onChange={(e) => setHeadline(e.target.value)} /></label>
-          <label className="field">
-            <span>Resume PDF (optional — parsed for tags, never scraped from LinkedIn)</span>
+          <Text variant="lede">You’re /{user.handle}. Chat and feed for this event stay in the room.</Text>
+          {error && <Banner>{error}</Banner>}
+          <Field label="Headline">
+            <input value={headline} onChange={(e) => setHeadline(e.target.value)} />
+          </Field>
+          <Field label="Resume PDF (optional)">
             <input type="file" accept="application/pdf" onChange={(e) => e.target.files?.[0] && onResume(e.target.files[0])} />
-          </label>
-          <label className="field"><span>Skills</span><input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="comma separated, edit after parse" /></label>
-          <label className="field"><span>Can advise on</span><input value={advise} onChange={(e) => setAdvise(e.target.value)} /></label>
-          <label className="field"><span>Open to collaborate on</span><input value={collab} onChange={(e) => setCollab(e.target.value)} /></label>
+          </Field>
+          <Field label="Skills">
+            <input value={skills} onChange={(e) => setSkills(e.target.value)} placeholder="comma separated" />
+          </Field>
+          <Field label="Can advise on">
+            <input value={advise} onChange={(e) => setAdvise(e.target.value)} />
+          </Field>
+          <Field label="Open to collaborate on">
+            <input value={collab} onChange={(e) => setCollab(e.target.value)} />
+          </Field>
           <label className="consent"><input type="checkbox" checked={showAttendance} onChange={(e) => setShowAttendance(e.target.checked)} /> Show my attendance to other attendees</label>
           <label className="consent"><input type="checkbox" checked={resumeVisible} onChange={(e) => setResumeVisible(e.target.checked)} /> Show my resume to other attendees for THIS event (off unless you opt in)</label>
           <label className="consent"><input type="checkbox" checked={showContact} onChange={(e) => setShowContact(e.target.checked)} /> Show my contact info after a call is accepted</label>
           <label className="consent"><input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} required /> I agree to join this event (required)</label>
-          <button className="btn primary" type="submit" disabled={!accepted}>Enter the room</button>
+          <Button type="submit" disabled={!accepted}>Enter the room</Button>
         </form>
       )}
-    </main>
+    </Page>
   )
 }

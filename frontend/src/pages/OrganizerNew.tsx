@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { graphApi } from '../api'
+import { Banner, Button, Field, Page, Text } from '../ui'
 
 function localStamp(hoursAhead: number) {
   const d = new Date(Date.now() + hoursAhead * 3600000)
@@ -31,26 +32,23 @@ export function OrganizerNew() {
   }
 
   return (
-    <main className="page">
-      <p className="eyebrow">New event</p>
-      <h1 className="serif" style={{ fontSize: 44 }}>Create a room</h1>
-      <p className="lede">Chat closes 24 hours after the event ends. The query feed closes after 7 days. Profiles stay.</p>
-      {error && <div className="error">{error}</div>}
+    <Page>
+      <Text variant="eyebrow">New event</Text>
+      <Text variant="title">Create a room</Text>
+      <Text variant="lede">Chat closes 24 hours after the event ends. The query feed closes after 7 days. Profiles stay.</Text>
+      {error && <Banner>{error}</Banner>}
       <form className="form" style={{ maxWidth: 560, marginTop: 18 }} onSubmit={onSubmit}>
-        <label className="field">
-          <span>Event name</span>
+        <Field label="Event name">
           <input value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label className="field">
-          <span>Starts</span>
+        </Field>
+        <Field label="Starts">
           <input type="datetime-local" value={starts} onChange={(e) => setStarts(e.target.value)} required />
-        </label>
-        <label className="field">
-          <span>Ends</span>
+        </Field>
+        <Field label="Ends">
           <input type="datetime-local" value={ends} onChange={(e) => setEnds(e.target.value)} required />
-        </label>
-        <button className="btn primary" type="submit">Create join link</button>
+        </Field>
+        <Button type="submit">Create join link</Button>
       </form>
-    </main>
+    </Page>
   )
 }

@@ -4,16 +4,16 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..deps import get_current_user
 from ..jsonutil import dumps, loads
+from ..metrics import track
 from ..models import EventCall, Query, User
-from ..privacy import call_unlocks_contact, get_visible_profile
+from ..privacy import call_unlocks_contact, get_visible_profile, require_member
 from .events import get_event_by_slug
-from ..privacy import require_member
 
 router = APIRouter(prefix="/api", tags=["event-calls"])
 
 
 def party(db: Session, user: User) -> dict:
-    return {"user_id": user.id, "name": user.name or user.handle, "headline": user.headline, "email": None}
+    return {"user_id": user.id, "handle": user.handle, "name": user.handle, "headline": user.headline, "email": None}
 
 
 @router.get("/events/{slug}/calls")
@@ -45,7 +45,8 @@ def list_calls(slug: str, db: Session = Depends(get_db), current: User = Depends
                 "role": "requester" if call.requester_id == current.id else "responder",
                 "other": {
                     "user_id": other.id,
-                    "name": other.name or other.handle,
+                    "handle": other.handle,
+                    "name": other.handle,
                     "headline": other.headline,
                     "email": email,
                 },
@@ -75,5 +76,13 @@ def complete_call(call_id: int, payload: dict, db: Session = Depends(get_db), cu
         call.feedback_requester = blob
     else:
         call.feedback_responder = blob
+    query = db.query(Query).filter(Query.id == call.query_id).first() if call.query_id else None
+    track(
+        db,
+        "call_no_show" if call.status == "no_show" else "call_completed",
+        user_id=current.id,
+        event_id=query.event_id if query else None,
+        properties={"status": call.status},
+    )
     db.commit()
     return {"ok": True, "status": call.status}

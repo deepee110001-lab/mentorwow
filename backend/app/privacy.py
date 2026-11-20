@@ -95,9 +95,10 @@ def get_visible_profile(db: Session, viewer: User, target: User, event: Event) -
         show_email = call_unlocks_contact(db, viewer.id, target.id)
     return {
         "user_id": target.id,
-        "name": target.name or target.handle,
+        "handle": target.handle,
+        "name": target.handle,
         "headline": target.headline,
-        "photo_url": target.photo_url,
+        "photo_url": "",
         "skill_tags": loads(profile.skill_tags),
         "can_advise_on": loads(profile.can_advise_on),
         "open_to_collaborate_on": loads(profile.open_to_collaborate_on),

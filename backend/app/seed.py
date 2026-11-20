@@ -9,7 +9,7 @@ PEOPLE = [
     {
         "email": "copper.loom@mentorwow.app",
         "handle": "copper-loom",
-        "accent": "#C24A2A",
+        "accent": "#3D4A23",
         "guru": 80,
         "projects": [
             {
@@ -29,7 +29,7 @@ PEOPLE = [
     {
         "email": "salt.harbor@mentorwow.app",
         "handle": "salt-harbor",
-        "accent": "#3F6B5C",
+        "accent": "#5B6B32",
         "guru": 64,
         "projects": [
             {
@@ -43,7 +43,7 @@ PEOPLE = [
     {
         "email": "nimbus.kiln@mentorwow.app",
         "handle": "nimbus-kiln",
-        "accent": "#2F4F6B",
+        "accent": "#2C3619",
         "guru": 41,
         "projects": [
             {
@@ -57,7 +57,7 @@ PEOPLE = [
     {
         "email": "amber.ridge@mentorwow.app",
         "handle": "amber-ridge",
-        "accent": "#8B5A2B",
+        "accent": "#445022",
         "guru": 55,
         "projects": [
             {

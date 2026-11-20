@@ -1,0 +1,26 @@
+# Optional coturn for hard NATs. Firebase has no TURN.
+# Needs a VM with a public IP and UDP 3478 + 49152-49200.
+# Then set Cloud Run env:
+#   TURN_URLS=turn:YOUR_IP:3478
+#   TURN_USERNAME=mentorwow
+#   TURN_CREDENTIAL=choose-a-long-secret
+#
+# Most home networks work with Google STUN only (already on). Do not run this on Cloud Run.
+
+services:
+  coturn:
+    image: coturn/coturn:4.6
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      --fingerprint
+      --lt-cred-mech
+      --user=${TURN_USERNAME:-mentorwow}:${TURN_CREDENTIAL:?set TURN_CREDENTIAL}
+      --realm=mentorwow.web.app
+      --listening-port=3478
+      --min-port=49152
+      --max-port=49200
+      --no-cli
+      --no-tls
+      --no-dtls
+      --external-ip=${TURN_PUBLIC_IP:?set TURN_PUBLIC_IP}

@@ -7,11 +7,14 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..ai import parse_resume
-from ..config import STORAGE_DIR
+from ..config import LEGACY_JOIN_TOKENS, LEGACY_SLUGS, STORAGE_DIR
+from ..handles import valid_handle
 from ..database import get_db
 from ..deps import get_current_user, get_optional_user
 from ..jsonutil import dumps, loads
+from ..metrics import track
 from ..models import Event, EventMember, Profile, User, as_utc, utcnow
+from ..connections import connections_for, viewer_state
 from ..privacy import (
     audit,
     get_or_create_profile,
@@ -48,20 +51,35 @@ def event_out(event: Event) -> dict:
 def get_event_by_slug(db: Session, slug: str) -> Event:
     event = db.query(Event).filter(Event.slug == slug).first()
     if event is None:
+        mapped = LEGACY_SLUGS.get(slug)
+        if mapped:
+            event = db.query(Event).filter(Event.slug == mapped).first()
+    if event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     refresh_status(event)
     return event
 
 
+def _event_by_join_token(db: Session, token: str) -> Event | None:
+    event = db.query(Event).filter(Event.join_link_token == token).first()
+    if event is None:
+        mapped = LEGACY_JOIN_TOKENS.get(token)
+        if mapped:
+            event = db.query(Event).filter(Event.join_link_token == mapped).first()
+    return event
+
+
 @router.get("/join/{token}")
 def resolve_join(token: str, db: Session = Depends(get_db), viewer: User | None = Depends(get_optional_user)):
-    event = db.query(Event).filter(Event.join_link_token == token).first()
+    event = _event_by_join_token(db, token)
     if event is None:
         raise HTTPException(status_code=404, detail="Invalid join link")
     refresh_status(event)
     if event.status == "archived":
         raise HTTPException(status_code=410, detail="This event is archived")
     member = member_of(db, event.id, viewer.id) if viewer else None
+    track(db, "join_link_opened", user_id=viewer.id if viewer else None, event_id=event.id, properties={"slug": event.slug})
+    db.commit()
     return {
         "event": event_out(event),
         "joined": bool(member and member.accepted_join),
@@ -76,7 +94,7 @@ def join_event(
     db: Session = Depends(get_db),
     current: User = Depends(get_current_user),
 ):
-    event = db.query(Event).filter(Event.join_link_token == token).first()
+    event = _event_by_join_token(db, token)
     if event is None:
         raise HTTPException(status_code=404, detail="Invalid join link")
     if not payload.get("accepted_join"):
@@ -84,8 +102,6 @@ def join_event(
     attendance = "visible" if payload.get("show_attendance", True) else "hidden"
     resume_vis = bool(payload.get("resume_visible_this_event", False))
     contact = bool(payload.get("show_contact_after_call", True))
-    if payload.get("name"):
-        current.name = payload["name"].strip()
     if payload.get("headline") is not None:
         current.headline = payload["headline"].strip()
     profile = get_or_create_profile(db, current)
@@ -109,6 +125,9 @@ def join_event(
         str(event.id),
         {"attendance": attendance, "resume": resume_vis, "contact": contact},
     )
+    track(db, "join_event", user_id=current.id, event_id=event.id, properties={"slug": event.slug})
+    if current.headline and loads(profile.skill_tags):
+        track(db, "profile_completed", user_id=current.id, event_id=event.id, properties={"slug": event.slug})
     db.commit()
     return {"ok": True, "event": event_out(event), "slug": event.slug}
 
@@ -133,6 +152,7 @@ def people(slug: str, db: Session = Depends(get_db), current: User = Depends(get
     event = get_event_by_slug(db, slug)
     require_member(db, event, current)
     members = db.query(EventMember).filter(EventMember.event_id == event.id, EventMember.accepted_join.is_(True)).all()
+    by_other = connections_for(db, current.id)
     out = []
     for member in members:
         if not visible_on_people(member, current, event):
@@ -140,6 +160,7 @@ def people(slug: str, db: Session = Depends(get_db), current: User = Depends(get
         target = db.query(User).filter(User.id == member.user_id).one()
         visible = get_visible_profile(db, current, target, event)
         if visible:
+            visible["connection"] = viewer_state(by_other.get(target.id), current.id)
             out.append(visible)
     return out
 
@@ -184,6 +205,7 @@ async def upload_resume(
     profile.skill_tags = dumps(tags["skill_tags"])
     profile.can_advise_on = dumps(tags["can_advise_on"])
     profile.open_to_collaborate_on = dumps(tags["open_to_collaborate_on"])
+    track(db, "resume_uploaded", user_id=current.id, properties={"source": "resume"})
     db.commit()
     return {"ok": True, **tags, "resume_url": f"/api/me/resume-file"}
 
@@ -194,7 +216,7 @@ def my_profile(db: Session = Depends(get_db), current: User = Depends(get_curren
     return {
         "id": current.id,
         "email": current.email,
-        "name": current.name,
+        "name": "",
         "headline": current.headline,
         "photo_url": current.photo_url,
         "handle": current.handle,
@@ -211,7 +233,15 @@ def my_profile(db: Session = Depends(get_db), current: User = Depends(get_curren
 @router.put("/me/profile")
 def update_profile(payload: dict, db: Session = Depends(get_db), current: User = Depends(get_current_user)):
     profile = get_or_create_profile(db, current)
-    for field in ("name", "headline", "photo_url", "default_profile_visibility"):
+    if payload.get("handle"):
+        handle = str(payload["handle"]).strip().lower()
+        if not valid_handle(handle):
+            raise HTTPException(status_code=400, detail="Handle must be 3–24 chars, start with a letter, lowercase letters, numbers, hyphens")
+        taken = db.query(User).filter(User.handle == handle, User.id != current.id).first()
+        if taken:
+            raise HTTPException(status_code=409, detail="Handle taken")
+        current.handle = handle
+    for field in ("headline", "default_profile_visibility"):
         if field in payload and payload[field] is not None:
             setattr(current, field, payload[field])
     if "show_contact_after_call" in payload:

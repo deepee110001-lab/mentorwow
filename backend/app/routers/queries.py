@@ -7,8 +7,10 @@ from ..database import get_db
 from ..deps import get_current_user
 from ..jsonutil import dumps, loads
 from ..matching import create_matches
-from ..models import EventCall, Query, QueryMatch, User, as_utc, utcnow
+from ..models import Event, EventCall, Query, QueryMatch, User, as_utc, utcnow
 from ..config import INCOMING_PENDING_LIMIT, OUTGOING_QUERY_LIMIT
+from ..connections import ensure_accepted_connection
+from ..metrics import track
 from ..privacy import outgoing_query_count, pending_incoming_count, refresh_status, require_member
 from .events import get_event_by_slug
 
@@ -28,7 +30,8 @@ def serialize_query(item: Query, matches: list[QueryMatch], viewer: User, db, ev
         "expires_at": item.expires_at,
         "author": {
             "user_id": author.id,
-            "name": author.name or author.handle,
+            "handle": author.handle,
+            "name": author.handle,
             "headline": author.headline,
         },
         "matched": my_match is not None or item.author_id == viewer.id,
@@ -110,14 +113,34 @@ def create_query(slug: str, payload: dict, db: Session = Depends(get_db), curren
         notify(
             db,
             int(target_id),
-            f"{current.name or current.handle} asked for 5 min",
+            f"{current.handle} asked for 5 min",
             body,
             f"/e/{event.slug}/feed",
         )
+        track(
+            db,
+            "query_matched",
+            user_id=current.id,
+            event_id=event.id,
+            properties={"slug": event.slug, "query_type": qtype},
+        )
     else:
         created = create_matches(db, item, event)
-        if not created:
-            pass
+        if created:
+            track(
+                db,
+                "query_matched",
+                user_id=current.id,
+                event_id=event.id,
+                properties={"slug": event.slug, "query_type": qtype},
+            )
+    track(
+        db,
+        "query_posted",
+        user_id=current.id,
+        event_id=event.id,
+        properties={"slug": event.slug, "query_type": qtype},
+    )
     db.commit()
     matches = db.query(QueryMatch).filter(QueryMatch.query_id == item.id).all()
     return serialize_query(item, matches, current, db, event)
@@ -145,18 +168,33 @@ def respond_query(query_id: int, payload: dict, db: Session = Depends(get_db), c
         if not start:
             raise HTTPException(status_code=400, detail="Pick a slot")
         scheduled = datetime.fromisoformat(start.replace("Z", "+00:00"))
-        room = f"https://meet.jit.si/mentorwow-{query.id}-{current.id}-{secrets_hex()}"
+        event_row = db.query(Event).filter(Event.id == query.event_id).one()
         call = EventCall(
             query_id=query.id,
             requester_id=query.author_id,
             responder_id=current.id,
             scheduled_at=scheduled,
             duration_minutes=5,
-            meeting_url=room,
+            meeting_url="",
             status="scheduled",
         )
         db.add(call)
         db.flush()
+        call.meeting_url = f"/e/{event_row.slug}/call/{call.id}"
+        ensure_accepted_connection(
+            db,
+            query.author_id,
+            current.id,
+            source="call",
+            event_id=query.event_id,
+        )
+        track(
+            db,
+            "call_accepted",
+            user_id=current.id,
+            event_id=query.event_id,
+            properties={"query_type": query.type, "status": "accepted"},
+        )
         call_payload = {
             "id": call.id,
             "scheduled_at": call.scheduled_at,
@@ -165,9 +203,3 @@ def respond_query(query_id: int, payload: dict, db: Session = Depends(get_db), c
         }
     db.commit()
     return {"ok": True, "response": action, "call": call_payload}
-
-
-def secrets_hex() -> str:
-    import secrets
-
-    return secrets.token_hex(4)

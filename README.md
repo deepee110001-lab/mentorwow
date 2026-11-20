@@ -24,18 +24,18 @@ npm run dev
 
 Open [http://localhost:5173](http://localhost:5173). Vite proxies `/api` to FastAPI.
 
-Copy [.env.example](.env.example) and set `OPENAI_API_KEY` (optional — heuristics run if it is missing) and LinkedIn keys (optional — email signup works without them).
+Copy [.env.example](.env.example) and set `OPENAI_API_KEY` (optional — heuristics run if it is missing), `GOOGLE_CLIENT_ID` (Gmail is the default sign-in), and LinkedIn keys (optional).
 
 ## How to run the pilot
 
 One organizer, one event, six metrics.
 
-1. Start backend and frontend as above. Seed creates **CEDAT Pilot Mixer**.
-2. Organizer login: `organizer@mentorwow.app` / `mentorwow`.
-3. Open [http://localhost:5173/organizer](http://localhost:5173/organizer) → CEDAT dashboard. Copy the join link `/join/cedat-join-demo` (or the QR).
-4. In a second browser (or incognito), open the join link. Sign in with email or LinkedIn OAuth. Confirm the three consent toggles. Resume stays hidden unless you opt in for this event.
-5. On event home: post a skill or collaboration query (max 2 / week). Matched people get an in-app notice and can accept a 5-minute Jitsi slot. Chat is public until 24h after the event ends.
-6. Show CEDAT the funnel at [http://localhost:5173/pilot/metrics](http://localhost:5173/pilot/metrics) (gate `mentorwow`):
+1. Start backend and frontend as above. Seed creates **MentorWow Pilot Mixer**.
+2. Organizer login: Google as `deepee110001@gmail.com`, or email `deepee110001@gmail.com` / `mentorwow`.
+3. Open [http://localhost:5173/organizer](http://localhost:5173/organizer) → dashboard. Copy the join link `/join/mentorwow-join` (or the QR).
+4. In a second browser (or incognito), open the join link. Sign in with Google (or email). Confirm the three consent toggles. Resume stays hidden unless you opt in for this event.
+5. On event home: post a skill or collaboration query (max 2 / week). Matched people get an in-app notice and can accept a 5-minute P2P call. Chat is public until 24h after the event ends.
+6. Show the funnel at [http://localhost:5173/pilot/metrics](http://localhost:5173/pilot/metrics) (gate `mentorwow`):
 
 | Metric | What it proves |
 |--------|----------------|

@@ -72,7 +72,7 @@ export function EventFeed() {
         <article className="card" key={item.id}>
           <span className={`chip`}>{item.type}</span>
           {item.matched && item.author.user_id && <span className="status pending">matched to you</span>}
-          <p><strong>{item.author.name}</strong> · {item.author.headline}</p>
+          <p><strong>/{item.author.handle || item.author.name}</strong> · {item.author.headline}</p>
           <p>{item.body}</p>
           {item.matched && item.my_response === 'pending' && event.feed_open && (
             <div className="row-actions">

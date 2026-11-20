@@ -27,9 +27,10 @@ class User(Base):
     headline: Mapped[str] = mapped_column(String(240), default="")
     photo_url: Mapped[str] = mapped_column(String(500), default="")
     linkedin_sub: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
+    google_sub: Mapped[str | None] = mapped_column(String(128), unique=True, nullable=True)
     default_profile_visibility: Mapped[str] = mapped_column(String(20), default="group")
     show_contact_after_call: Mapped[bool] = mapped_column(Boolean, default=True)
-    accent: Mapped[str] = mapped_column(String(20), default="#C24A2A")
+    accent: Mapped[str] = mapped_column(String(20), default="#3D4A23")
     guru_balance: Mapped[int] = mapped_column(Integer, default=20)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
@@ -209,6 +210,21 @@ class QueryMatch(Base):
     matched_user: Mapped[User] = relationship()
 
 
+class Connection(Base):
+    __tablename__ = "net_connections"
+    __table_args__ = (UniqueConstraint("user_low_id", "user_high_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_low_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_high_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    requester_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("net_events.id"), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    source: Mapped[str] = mapped_column(String(20), default="native")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 class EventCall(Base):
     __tablename__ = "net_calls"
 
@@ -236,13 +252,26 @@ class ChatMessage(Base):
     author_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("net_chat_messages.id"), nullable=True)
     body: Mapped[str] = mapped_column(Text)
+    kind: Mapped[str] = mapped_column(String(20), default="message")
     is_pinned: Mapped[bool] = mapped_column(Boolean, default=False)
     is_system: Mapped[bool] = mapped_column(Boolean, default=False)
     flagged: Mapped[bool] = mapped_column(Boolean, default=False)
     flag_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     author: Mapped[User | None] = relationship()
+
+
+class ChatPollVote(Base):
+    __tablename__ = "net_chat_poll_votes"
+    __table_args__ = (UniqueConstraint("message_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    message_id: Mapped[int] = mapped_column(ForeignKey("net_chat_messages.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    choice: Mapped[str] = mapped_column(String(8))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class AuditLog(Base):
@@ -255,6 +284,19 @@ class AuditLog(Base):
     target_id: Mapped[str] = mapped_column(String(80), default="")
     metadata_json: Mapped[str] = mapped_column(Text, default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class AnalyticsEvent(Base):
+    __tablename__ = "net_analytics_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    event_id: Mapped[int | None] = mapped_column(ForeignKey("net_events.id"), nullable=True, index=True)
+    session_id: Mapped[str] = mapped_column(String(64), default="", index=True)
+    path: Mapped[str] = mapped_column(String(240), default="")
+    properties_json: Mapped[str] = mapped_column(Text, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
 class Notification(Base):

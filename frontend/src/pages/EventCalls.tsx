@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useOutletContext } from 'react-router-dom'
+import { Link, useOutletContext } from 'react-router-dom'
 import { graphApi } from '../api'
 import type { EventCallRow } from '../types'
 
@@ -20,13 +20,13 @@ export function EventCalls() {
       {calls.map((call) => (
         <article className="card" key={call.id}>
           <span className={`status ${call.status}`}>{call.status}</span>
-          <h3 className="serif" style={{ margin: '8px 0 4px', fontSize: 26 }}>{call.other.name}</h3>
+          <h3 className="serif" style={{ margin: '8px 0 4px', fontSize: 26 }}>/{call.other.handle || call.other.name}</h3>
           <p>{call.other.headline}</p>
           {call.other.email ? <p>Contact: {call.other.email}</p> : <p className="empty">Contact hidden until the call is accepted.</p>}
           {call.meeting_url && (
-            <a className="btn primary" href={call.meeting_url} target="_blank" rel="noreferrer">
-              Join Jitsi (5 min)
-            </a>
+            <Link className="btn primary" to={call.meeting_url.startsWith('/') ? call.meeting_url : `/e/${slug}/call/${call.id}`}>
+              Start 5-min P2P call
+            </Link>
           )}
           {call.status === 'scheduled' && (
             <form

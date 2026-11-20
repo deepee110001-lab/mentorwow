@@ -1,5 +1,6 @@
 import type {
   ChatMsg,
+  ConnectionPerson,
   EventCallRow,
   EventInfo,
   GuruEvent,
@@ -88,11 +89,13 @@ export const callApi = {
 
 export const authApi = {
   me: () => api<User>('/api/auth/me'),
+  config: () => api<{ google_client_id: string; google_enabled: boolean; default_provider: string }>('/api/auth/config'),
   login: (email: string, password: string) =>
-    api<{ access_token: string; user: User }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    api<{ access_token: string; user: User; is_new: boolean }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  google: (credential: string) =>
+    api<{ access_token: string; user: User; is_new: boolean }>('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential }) }),
   register: (payload: { email: string; password: string; name?: string; handle?: string }) =>
-    api<{ access_token: string; user: User }>('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
-  magic: (email: string) => api<{ ok: boolean; dev_token?: string | null }>('/api/auth/magic-link', { method: 'POST', body: JSON.stringify({ email }) }),
+    api<{ access_token: string; user: User; is_new: boolean }>('/api/auth/register', { method: 'POST', body: JSON.stringify(payload) }),
 }
 
 export const graphApi = {
@@ -100,17 +103,26 @@ export const graphApi = {
   join: (token: string, payload: object) => api<{ ok: boolean; slug: string; event: EventInfo }>(`/api/join/${token}`, { method: 'POST', body: JSON.stringify(payload) }),
   event: (slug: string) => api<{ event: EventInfo; member: object; is_organizer: boolean }>(`/api/events/${slug}`),
   people: (slug: string) => api<VisiblePerson[]>(`/api/events/${slug}/people`),
+  connections: () =>
+    api<{ connected: ConnectionPerson[]; incoming: ConnectionPerson[]; outgoing: ConnectionPerson[] }>('/api/connections'),
+  connect: (slug: string, userId: number) =>
+    api<ConnectionPerson>(`/api/events/${slug}/connect`, { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  respondConnect: (id: number, response: 'accepted' | 'declined') =>
+    api<ConnectionPerson>(`/api/connections/${id}/respond`, { method: 'POST', body: JSON.stringify({ response }) }),
+  disconnect: (id: number) => api<ConnectionPerson>(`/api/connections/${id}/disconnect`, { method: 'POST', body: '{}' }),
+  myPolls: () => api<ChatMsg[]>('/api/me/polls'),
   queries: (slug: string) => api<QueryItem[]>(`/api/events/${slug}/queries`),
   createQuery: (slug: string, payload: object) =>
     api<QueryItem>(`/api/events/${slug}/queries`, { method: 'POST', body: JSON.stringify(payload) }),
   respond: (id: number, payload: object) => api(`/api/queries/${id}/respond`, { method: 'POST', body: JSON.stringify(payload) }),
   chat: (slug: string) => api<{ open: boolean; closes_at: string; messages: ChatMsg[] }>(`/api/events/${slug}/chat`),
-  postChat: (slug: string, body: string, parent_id?: number) =>
-    api<ChatMsg>(`/api/events/${slug}/chat`, { method: 'POST', body: JSON.stringify({ body, parent_id }) }),
+  postChat: (slug: string, body: string, parent_id?: number, kind: 'message' | 'poll' = 'message') =>
+    api<ChatMsg>(`/api/events/${slug}/chat`, { method: 'POST', body: JSON.stringify({ body, parent_id, kind }) }),
+  voteChat: (slug: string, id: number, choice: 'yay' | 'nay') =>
+    api<ChatMsg>(`/api/events/${slug}/chat/${id}/vote`, { method: 'POST', body: JSON.stringify({ choice }) }),
   recap: (slug: string) => api<ChatMsg>(`/api/events/${slug}/chat/recap`, { method: 'POST', body: JSON.stringify({}) }),
-  report: (slug: string, id: number, reason: string) =>
-    api(`/api/events/${slug}/chat/${id}/report`, { method: 'POST', body: JSON.stringify({ reason }) }),
   pin: (slug: string, id: number) => api(`/api/events/${slug}/chat/${id}/pin`, { method: 'POST', body: JSON.stringify({}) }),
+  deleteChat: (slug: string, id: number) => api<ChatMsg>(`/api/events/${slug}/chat/${id}`, { method: 'DELETE' }),
   calls: (slug: string) => api<EventCallRow[]>(`/api/events/${slug}/calls`),
   completeCall: (id: number, payload: object) => api(`/api/calls/${id}/complete`, { method: 'POST', body: JSON.stringify(payload) }),
   consent: (payload: object) => api('/api/consent', { method: 'POST', body: JSON.stringify(payload) }),

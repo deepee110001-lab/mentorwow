@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, Outlet, useParams } from 'react-router-dom'
+import { NavLink, Outlet, useParams } from 'react-router-dom'
 import { graphApi } from '../api'
 import { useAuth } from '../auth'
 import type { EventInfo } from '../types'
+import { Banner, Button, Page, Text } from '../ui'
 
 export function EventShell() {
   const { slug } = useParams()
@@ -15,30 +16,30 @@ export function EventShell() {
     graphApi.event(slug).then((data) => setEvent(data.event)).catch((err) => setError(err.message))
   }, [slug, user])
 
-  if (!ready) return <main className="page">Loading…</main>
+  if (!ready) return <Page>Loading…</Page>
   if (!user) {
     return (
-      <main className="page">
-        <p>Sign in to enter this event.</p>
-        <Link className="btn primary" to={`/login?next=/e/${slug}/feed`}>Sign in</Link>
-      </main>
+      <Page>
+        <Text variant="lede">Sign in to enter this event.</Text>
+        <Button to={`/login?next=/e/${slug}/feed`}>Sign in</Button>
+      </Page>
     )
   }
   if (error) {
     return (
-      <main className="page">
-        <div className="error">{error}</div>
-        <p>If you have not joined, use the event join link.</p>
-        <Link className="btn ghost" to="/join/cedat-join-demo">Pilot join link</Link>
-      </main>
+      <Page>
+        <Banner>{error}</Banner>
+        <Text variant="body">If you have not joined, use the event join link.</Text>
+        <Button variant="ghost" to="/join/mentorwow-join">Pilot join link</Button>
+      </Page>
     )
   }
-  if (!event || !slug) return <main className="page">Loading event…</main>
+  if (!event || !slug) return <Page>Loading event…</Page>
 
   return (
-    <main className="page event-page">
-      <p className="eyebrow">{event.status}</p>
-      <h1 className="serif" style={{ fontSize: 40, margin: '4px 0 12px' }}>{event.name}</h1>
+    <Page className="event-page">
+      <Text variant="eyebrow">{event.status}</Text>
+      <Text variant="title">{event.name}</Text>
       <nav className="tabs">
         <NavLink to={`/e/${slug}/feed`}>Feed</NavLink>
         <NavLink to={`/e/${slug}/people`}>People</NavLink>
@@ -47,6 +48,6 @@ export function EventShell() {
         <NavLink to={`/e/${slug}/profile`}>Profile</NavLink>
       </nav>
       <Outlet context={{ event, slug }} />
-    </main>
+    </Page>
   )
 }

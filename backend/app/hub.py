@@ -119,6 +119,21 @@ class Hub:
             bucket = self.waiting.get((waiter.topic, waiter.side), [])
             self.waiting[(waiter.topic, waiter.side)] = [item for item in bucket if item.user_id != user_id]
 
+    async def ensure_event_room(self, room_id: str, requester_id: int, responder_id: int) -> Room:
+        async with self.lock:
+            room = self.rooms.get(room_id)
+            if room is None or room.closed:
+                room = Room(
+                    room_id=room_id,
+                    topic="event-call",
+                    giver_id=requester_id,
+                    seeker_id=responder_id,
+                )
+                self.rooms[room_id] = room
+                self.user_room[requester_id] = room_id
+                self.user_room[responder_id] = room_id
+            return room
+
     async def connect(self, room_id: str, user_id: int, socket: WebSocket) -> Room | None:
         async with self.lock:
             room = self.rooms.get(room_id)

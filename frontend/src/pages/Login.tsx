@@ -1,70 +1,85 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { authApi } from '../api'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth'
+import { SocialAuth } from '../SocialAuth'
+import { track } from '../metrics'
+import { Banner, Button, Card, Field, Page, Text } from '../ui'
+
+const AUTH_ERRORS: Record<string, string> = {
+  linkedin_not_configured: 'LinkedIn sign-in is not configured yet. Use Google or email.',
+  google_not_configured: 'Google sign-in is not configured yet. Use LinkedIn or email.',
+}
 
 export function Login() {
-  const { login } = useAuth()
+  const { login, loginGoogle } = useAuth()
   const navigate = useNavigate()
   const [params] = useSearchParams()
-  const next = params.get('next') || '/organizer'
-  const [email, setEmail] = useState('organizer@mentorwow.app')
-  const [password, setPassword] = useState('mentorwow')
-  const [error, setError] = useState(
-    params.get('error') === 'linkedin_not_configured'
-      ? 'LinkedIn OAuth is not configured. Use email for the pilot. TODO: set LINKEDIN_CLIENT_ID.'
-      : '',
-  )
+  const next = params.get('next') || '/'
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState(AUTH_ERRORS[params.get('error') || ''] || '')
+  const [emailOpen, setEmailOpen] = useState(Boolean(params.get('error')))
+
+  function afterAuth(isNew: boolean, method: string) {
+    track(isNew ? 'register_email' : 'login_email', { method, is_new: String(isNew) })
+    navigate(next)
+  }
+
+  async function onGoogle(credential: string) {
+    setError('')
+    try {
+      const isNew = await loginGoogle(credential)
+      track(isNew ? 'register_google' : 'login_google', { method: 'google', is_new: String(isNew) })
+      navigate(next)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Google sign-in failed')
+    }
+  }
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
     setError('')
     try {
-      await login(email, password)
-      navigate(next)
+      const isNew = await login(email, password)
+      afterAuth(isNew, 'email')
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not sign in')
-    }
-  }
-
-  async function magic() {
-    setError('')
-    try {
-      const result = await authApi.magic(email)
-      if (result.dev_token) {
-        localStorage.setItem('mentorwow.token', result.dev_token)
-        window.location.href = next
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Magic link failed')
+      setError(err instanceof Error ? err.message : 'Could not continue')
     }
   }
 
   return (
-    <main className="page">
-      <div className="auth-wrap card">
-        <p className="eyebrow">Email or LinkedIn</p>
-        <h1 className="serif" style={{ fontSize: 42, margin: '8px 0 18px' }}>Sign in</h1>
-        {error && <div className="error">{error}</div>}
-        <form className="form" onSubmit={onSubmit}>
-          <label className="field">
-            <span>Email</span>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </label>
-          <label className="field">
-            <span>Password</span>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </label>
-          <button className="btn primary" type="submit">Enter</button>
-        </form>
-        <div className="demo">
-          <button className="btn ghost" type="button" onClick={magic}>Email magic link</button>
-          <a className="btn ghost" href="/api/auth/linkedin">LinkedIn (OAuth subset)</a>
-        </div>
-        <p style={{ marginTop: 16 }}>
-          New? <Link to={`/register?next=${encodeURIComponent(next)}`}>Create an account</Link>
-        </p>
-      </div>
-    </main>
+    <Page>
+      <Card className="auth-wrap" as="div">
+        <Text variant="eyebrow">Anonymous</Text>
+        <Text variant="title">Continue</Text>
+        <Text variant="lede">
+          New or returning — same door. You get a handle automatically. You can change it later.
+        </Text>
+        {error && <Banner>{error}</Banner>}
+        <SocialAuth onGoogle={onGoogle} />
+        {emailOpen ? (
+          <form className="form" onSubmit={onSubmit}>
+            <Field label="Email">
+              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+            </Field>
+            <Field label="Password">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                autoComplete="current-password"
+              />
+            </Field>
+            <Button type="submit">Continue with email</Button>
+          </form>
+        ) : (
+          <Button variant="text" className="email-fallback" onClick={() => setEmailOpen(true)}>
+            Use email instead
+          </Button>
+        )}
+      </Card>
+    </Page>
   )
 }

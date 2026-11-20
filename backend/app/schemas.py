@@ -35,6 +35,7 @@ class MeOut(BaseModel):
     photo_url: str = ""
     accent: str
     guru_balance: int
+    is_admin: bool = False
     projects: list[ProjectOut] = []
 
 
@@ -54,6 +55,7 @@ class TokenOut(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: MeOut
+    is_new: bool = False
 
 
 class ProfileUpdate(BaseModel):

@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { graphApi } from '../api'
 import { useAuth } from '../auth'
+import { Button } from '../ui'
 
 export function Layout() {
   const { user, logout } = useAuth()
   const [notes, setNotes] = useState<{ id: number; title: string; body: string; link: string }[]>([])
+  const admin = Boolean(user?.is_admin)
 
   useEffect(() => {
     if (!user) return
@@ -20,11 +22,17 @@ export function Layout() {
           <span className="brand-kicker">graph</span>
         </NavLink>
         <nav className="nav-links">
-          {user ? (
+          {user && (
             <>
-              <NavLink to="/organizer">Organize</NavLink>
-              <NavLink to="/e/cedat-pilot/feed">Pilot event</NavLink>
-              {notes.length > 0 && (
+              <NavLink to="/connected">Connected</NavLink>
+              {admin && (
+                <>
+                  <NavLink to="/organizer">Organize</NavLink>
+                  <NavLink to="/e/mentorwow-pilot/feed">Pilot event</NavLink>
+                  <NavLink to="/pilot/metrics">Metrics</NavLink>
+                </>
+              )}
+              {admin && notes.length > 0 && (
                 <details className="notes">
                   <summary>{notes.length} notices</summary>
                   {notes.slice(0, 6).map((note) => (
@@ -34,24 +42,17 @@ export function Layout() {
                   ))}
                 </details>
               )}
-              <span className="empty">{user.name || user.handle}</span>
-              <button className="text-btn" onClick={logout}>
+              <span className="empty">/{user.handle}</span>
+              <Button variant="text" onClick={logout}>
                 Sign out
-              </button>
-            </>
-          ) : (
-            <>
-              <NavLink to="/login">Sign in</NavLink>
-              <NavLink to="/register" className="btn primary">
-                Join
-              </NavLink>
+              </Button>
             </>
           )}
         </nav>
       </header>
       <Outlet />
       <footer className="footer">
-        <span>Event graph · 24h chat · 7-day feed · 5-min calls</span>
+        <span>Event graph · native connections stay · 24h chat · 5-min calls</span>
         <span>DPDP: consent is enforced on the server.</span>
       </footer>
     </div>

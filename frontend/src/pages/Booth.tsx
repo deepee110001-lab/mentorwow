@@ -84,6 +84,7 @@ export function Booth() {
           remote: remoteRef.current,
           initiator: mySide === data.initiator_side,
           send: (payload) => socket.send(JSON.stringify({ type: 'signal', payload })),
+          token,
         })
         stopRef.current = peer.stop
         const beat = window.setInterval(async () => {

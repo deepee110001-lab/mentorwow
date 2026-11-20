@@ -5,8 +5,9 @@ import type { User } from './types'
 type AuthState = {
   user: User | null
   ready: boolean
-  login: (email: string, password: string) => Promise<void>
-  register: (payload: { email: string; password: string; name?: string; handle?: string }) => Promise<void>
+  login: (email: string, password: string) => Promise<boolean>
+  loginGoogle: (credential: string) => Promise<boolean>
+  register: (payload: { email: string; password: string; name?: string; handle?: string }) => Promise<boolean>
   logout: () => void
   refresh: () => Promise<void>
   setUser: (user: User) => void
@@ -54,11 +55,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await authApi.login(email, password)
         setToken(result.access_token)
         setUser(result.user)
+        return Boolean(result.is_new)
+      },
+      async loginGoogle(credential) {
+        const result = await authApi.google(credential)
+        setToken(result.access_token)
+        setUser(result.user)
+        return Boolean(result.is_new)
       },
       async register(payload) {
         const result = await authApi.register(payload)
         setToken(result.access_token)
         setUser(result.user)
+        return Boolean(result.is_new)
       },
       logout() {
         setToken(null)

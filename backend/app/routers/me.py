@@ -17,7 +17,7 @@ def update_me(payload: ProfileUpdate, db: Session = Depends(get_db), current: Us
     if payload.handle:
         handle = payload.handle.strip().lower()
         if not valid_handle(handle):
-            raise HTTPException(status_code=400, detail="Handle must be 3–24 chars, lowercase")
+            raise HTTPException(status_code=400, detail="Handle must be 3–24 chars, start with a letter, lowercase letters, numbers, hyphens")
         taken = db.query(User).filter(User.handle == handle, User.id != current.id).first()
         if taken:
             raise HTTPException(status_code=409, detail="Handle taken")

@@ -69,9 +69,19 @@ export function OrganizerDashboard() {
           <section className="card">
             <p className="eyebrow">Funnel</p>
             <p>
-              {m.queries_posted} posted → {m.queries_matched} matched → {m.calls_accepted} accepted → {m.calls_completed} completed
+              {m.queries_posted} posted → {m.queries_matched} matched ({m.match_rate_pct ?? 0}%) → {m.calls_accepted} accepted ({m.accept_rate_pct ?? 0}%) → {m.calls_completed} completed ({m.complete_rate_pct ?? 0}%)
             </p>
           </section>
+          {(m.insights || []).length > 0 && (
+            <section className="list">
+              {m.insights!.map((item) => (
+                <article className={`insight ${item.severity}`} key={item.text}>
+                  <p className="eyebrow">{item.severity}</p>
+                  <p>{item.text}</p>
+                </article>
+              ))}
+            </section>
+          )}
           <section className="grid">
             {(['skill_tags', 'can_advise_on', 'open_to_collaborate_on'] as const).map((key) => (
               <article className="card" key={key}>

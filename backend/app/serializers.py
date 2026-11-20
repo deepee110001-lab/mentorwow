@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from .config import ORGANIZER_EMAIL
 from .guru import parse_topics
 from .models import Follow, Post, Project, User, Vote
 from .schemas import MeOut, PostOut, ProjectOut, PublicProfile
@@ -25,6 +26,7 @@ def me_out(user: User) -> MeOut:
         photo_url=user.photo_url or "",
         accent=user.accent,
         guru_balance=user.guru_balance,
+        is_admin=user.email.lower() == ORGANIZER_EMAIL,
         projects=[project_out(item) for item in user.projects],
     )
 

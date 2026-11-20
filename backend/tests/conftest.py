@@ -49,6 +49,6 @@ def join(client: TestClient, headers: dict, **flags):
         "open_to_collaborate_on": flags.pop("open_to_collaborate_on", ["technical co-founder"]),
     }
     payload.update(flags)
-    response = client.post("/api/join/cedat-join-demo", json=payload, headers=headers)
+    response = client.post("/api/join/mentorwow-join", json=payload, headers=headers)
     assert response.status_code == 200, response.text
     return response.json()

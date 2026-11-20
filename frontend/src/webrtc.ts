@@ -1,23 +1,36 @@
-const ICE: RTCConfiguration = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-}
-
 export type SignalPayload =
   | { kind: 'offer'; sdp: string }
   | { kind: 'answer'; sdp: string }
   | { kind: 'ice'; candidate: RTCIceCandidateInit }
+
+const FALLBACK_ICE: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
+
+async function iceServers(token: string | null): Promise<RTCIceServer[]> {
+  try {
+    const headers: HeadersInit = {}
+    if (token) headers.Authorization = `Bearer ${token}`
+    const response = await fetch('/api/calls/ice', { headers })
+    if (!response.ok) return FALLBACK_ICE
+    const data = await response.json()
+    if (Array.isArray(data.iceServers) && data.iceServers.length) return data.iceServers
+  } catch {
+    /* STUN-only is enough on open NATs */
+  }
+  return FALLBACK_ICE
+}
 
 export async function startPeer(options: {
   local: HTMLVideoElement
   remote: HTMLVideoElement
   initiator: boolean
   send: (payload: SignalPayload) => void
+  token?: string | null
 }) {
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true })
   options.local.srcObject = stream
   await options.local.play().catch(() => undefined)
 
-  const pc = new RTCPeerConnection(ICE)
+  const pc = new RTCPeerConnection({ iceServers: await iceServers(options.token ?? null) })
   stream.getTracks().forEach((track) => pc.addTrack(track, stream))
   pc.ontrack = (event) => {
     const [remoteStream] = event.streams

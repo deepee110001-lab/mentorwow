@@ -1,14 +1,52 @@
 .DS_Store
+Thumbs.db
+
+# Secrets — never commit. Copy .env.example locally.
 .env
-.env.local
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.pem
+*.p12
+credentials.json
+service-account*.json
+*-service-account.json
+
+# Python
 __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
 venv/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Local databases and uploads
 backend/mentorwow.db
 backend/*.db
+backend/tests/*.db
+backend/storage/resumes/*
+!backend/storage/resumes/.gitkeep
+
+# Node
 node_modules/
 frontend/dist/
 frontend/.vite/
+*.tsbuildinfo
+
+# Firebase / gcloud local cache
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Logs and OS
 *.log
+.idea/
+.vscode/*
+!.vscode/extensions.json

@@ -11,11 +11,13 @@ from .routers import (
     auth,
     calls,
     chat,
+    connections,
     consent,
     event_calls,
     events,
     feed,
     me,
+    metrics,
     organizer,
     queries,
     wallet,
@@ -52,6 +54,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(metrics.router)
 app.include_router(me.router)
 app.include_router(feed.router)
 app.include_router(wallet.router)
@@ -60,6 +63,7 @@ app.include_router(events.router)
 app.include_router(queries.router)
 app.include_router(event_calls.router)
 app.include_router(chat.router)
+app.include_router(connections.router)
 app.include_router(organizer.router)
 app.include_router(consent.router)
 app.include_router(ai_routes.router)
